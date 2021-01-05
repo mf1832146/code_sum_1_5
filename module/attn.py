@@ -48,7 +48,7 @@ def _standard_attn(query, key, value, mask=None, dropout=None):
     d_k = query.size(-1)
     scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)
     if mask is not None:
-        scores = scores.masked_fill(mask, float('-inf'))
+        scores = scores.masked_fill(mask == 0, float('-inf'))
     p_attn = F.softmax(scores, dim=-1)
     if dropout is not None:
         p_attn = dropout(p_attn)
@@ -59,7 +59,7 @@ def _rel_attn(query, key, value, rel_k, rel_v, _rel_attn_inner, mask=None, dropo
     d_k = query.size(-1)
     scores = _rel_attn_inner(query, key, rel_k, True) / math.sqrt(d_k)
     if mask is not None:
-        scores = scores.masked_fill(mask, float('-inf'))
+        scores = scores.masked_fill(mask == 0, float('-inf'))
     p_attn = F.softmax(scores, dim=-1)
     if dropout is not None:
         p_attn = dropout(p_attn)
@@ -93,9 +93,7 @@ class MultiHeadAttn(nn.Module):
         """
         mask: Bool Tensor. If True, mask with -inf, else do not change.
         """
-        q, k, v = \
-            [self.split_heads(l(x))
-             for l, x in zip(self.linear_layers, (q, k, v))]
+        q, k, v = [self.split_heads(l(x)) for l, x in zip(self.linear_layers, (q, k, v))]
 
         x, attn = _standard_attn(q, k, v, mask=mask,
                                  dropout=self.dropout)
