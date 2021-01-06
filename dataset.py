@@ -169,7 +169,7 @@ class TreeDataSet(data.Dataset):
         if len(batch_rel_semantic_ids) > 0:
             batch_rel_semantic_ids = torch.stack(batch_rel_semantic_ids, dim=0)
             rel_ids.append(batch_rel_semantic_ids)
-        batch_semantic_mask = torch.stack(batch_semantic_mask, dim=0)
+        batch_semantic_mask = torch.stack(batch_semantic_mask, dim=0).unsqueeze(-2).unsqueeze(1)
         expanded_x = torch.stack(expanded_x, dim=0)
         expanded_y = torch.stack(expanded_y, dim=0)
 

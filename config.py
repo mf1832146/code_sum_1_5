@@ -11,7 +11,7 @@ def get_config():
         # the max size of tree
         'max_tree_size': 100,
         # the max size of nl
-        'max_nl_len': 30,
+        'max_nl_len': 20,
         # max path len
         'k': 5
     }

@@ -49,9 +49,9 @@ class ASTEncoderDecoder(StandardEncoderDecoder):
     def forward(self, inputs):
         src, tgt, src_mask, tgt_mask, rel_ids = inputs
         encoder_src_mask = self.gen_src_mask(rel_ids)
-        encoder_outputs, _ = self.encode(src, encoder_src_mask, rel_ids)
+        encoder_outputs = self.encode(src, encoder_src_mask, rel_ids)
 
-        tgt_emb = self.tgt_embed(tgt)
+        tgt_emb = self.generate_tgt_emb(tgt)
         decoder_outputs, attn = self.decode(encoder_outputs, src_mask, tgt_emb, tgt_mask)
         return decoder_outputs, attn, encoder_outputs, tgt_emb
 
