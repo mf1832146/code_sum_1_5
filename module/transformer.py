@@ -4,7 +4,8 @@ import torch.nn.functional as F
 import copy
 import math
 
-from module.attn import MultiHeadAttn, MultiHeadRelAttn, MultiHeadRelTreeAttn
+from data_pre_process.vocab import Vocab
+from module.attn import MultiHeadAttn, MultiHeadRelAttn
 from module.generator import PointerGenerator, Generator
 from module.position_embedding import TreeRelativePosition, StandardRelativePosition
 from utils import clones
@@ -21,17 +22,24 @@ class StandardEncoderDecoder(nn.Module):
         self.num_heads = num_heads
 
     def forward(self, inputs):
-        src, tgt, src_mask, tgt_mask, _ = inputs
-        encoder_outputs = self.encode(src, src_mask, None)
-        tgt_emb = self.tgt_embed(tgt)
+        src, tgt, src_mask, tgt_mask, rel_ids = inputs
+        encoder_outputs = self.encode(src, src_mask, rel_ids)
+        tgt_emb = self.generate_tgt_emb(tgt)
         decoder_outputs, attn = self.decode(encoder_outputs, src_mask, tgt_emb, tgt_mask)
         return decoder_outputs, attn, encoder_outputs, tgt_emb
 
-    def encode(self, src, src_mask):
-        return self.encoder(self.src_embed(src), src_mask)
+    def encode(self, src, src_mask, rel_ids):
+        return self.encoder(self.src_embed(src), src_mask, rel_ids)
 
     def decode(self, memory, src_mask, tgt_emb, tgt_mask):
         return self.decoder(tgt_emb, memory, src_mask, tgt_mask)
+
+    def generate_tgt_emb(self, tgt):
+        # 过滤掉非词汇表中的词 -> map to UNK
+        tgt_vocab_size = self.tgt_embed.lut.num_embeddings
+        tgt.masked_fill(tgt >= tgt_vocab_size, Vocab.UNK)
+
+        return self.tgt_embed(tgt)
 
 
 class ASTEncoderDecoder(StandardEncoderDecoder):
@@ -56,6 +64,13 @@ class ASTEncoderDecoder(StandardEncoderDecoder):
 
         return torch.cat(masks, dim=1)
 
+    def generate_tgt_emb(self, tgt):
+        # 过滤掉非词汇表中的词 -> map to UNK
+        tgt_vocab_size = self.tgt_embed.lut.num_embeddings
+        tgt.masked_fill(tgt >= tgt_vocab_size, Vocab.UNK)
+
+        return self.tgt_embed(tgt)
+
 
 class Embeddings(nn.Module):
     def __init__(self, d_model, vocab):
@@ -76,7 +91,7 @@ class PositionWiseFeedForward(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        return self.w_2(self.dropout(F.relu(self.w_1(x))))
+        return self.w_2(self.dropout(F.relu(self.w_1(x)))), None
 
 
 class SublayerConnection(nn.Module):
@@ -86,7 +101,8 @@ class SublayerConnection(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, sublayer):
-        return x + self.dropout(sublayer(self.norm(x)))
+        output, attn = sublayer(self.norm(x))
+        return x + self.dropout(output), attn
 
 
 class Encoder(nn.Module):
@@ -97,8 +113,8 @@ class Encoder(nn.Module):
         self.relative_pos_emb = relative_pos_emb
 
     def forward(self, x, mask, rel_ids):
-        if rel_ids is None:
-            rel_k_emb, rel_v_emb = self.relative_pos_emb(x.size(1))
+        if len(rel_ids) == 0:
+            rel_k_emb, rel_v_emb = self.relative_pos_emb((x.size(0), x.size(1)))
         else:
             rel_k_emb, rel_v_emb = self.relative_pos_emb(rel_ids)
         for layer in self.layers:
@@ -116,7 +132,8 @@ class EncoderLayer(nn.Module):
 
     def forward(self, x, mask, rel_k_emb, rel_v_emb):
         x, _ = self.sublayer[0](x, lambda y: self.self_attn(y, y, y, mask, rel_k_emb, rel_v_emb))
-        return self.sublayer[1](x, self.feed_forward)
+        x, _ = self.sublayer[1](x, self.feed_forward)
+        return x
 
 
 class Decoder(nn.Module):
@@ -127,7 +144,7 @@ class Decoder(nn.Module):
         self.relative_pos_emb = relative_pos_emb
 
     def forward(self, x, memory, src_mask, tgt_mask):
-        relative_k_emb, relative_v_emb = self.relative_pos_emb(x.size(1))
+        relative_k_emb, relative_v_emb = self.relative_pos_emb((x.size(0), x.size(1)))
         for layer in self.layers:
             x, attn = layer(x, memory, src_mask, tgt_mask, relative_k_emb, relative_v_emb)
         return self.norm(x), attn
@@ -146,7 +163,8 @@ class DecoderLayer(nn.Module):
         m = memory
         x, _ = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, tgt_mask, relative_k_emb, relative_v_emb))
         x, attn = self.sublayer[1](x, lambda x: self.src_attn(x, m, m, src_mask))
-        return self.sublayer[2](x, self.feed_forward), attn
+        output, _ = self.sublayer[2](x, self.feed_forward)
+        return output, attn
 
 
 def make_model(src_vocab, tgt_vocab, N=2, d_model=300, d_ff=512, k=5, h=6,
@@ -154,16 +172,15 @@ def make_model(src_vocab, tgt_vocab, N=2, d_model=300, d_ff=512, k=5, h=6,
     c = copy.deepcopy
     attn = MultiHeadAttn(d_model, h, dropout)
     rel_attn = MultiHeadRelAttn(d_model, h, dropout)
-    tree_attn = MultiHeadRelTreeAttn(d_model, h, dropout)
 
     ff = PositionWiseFeedForward(d_model, d_ff, dropout)
     tree_rel_pos_emb = TreeRelativePosition(d_model // h, k, h, num_features, dropout)
-    rel_pos_emb = StandardRelativePosition(d_model // h, k, dropout)
+    rel_pos_emb = StandardRelativePosition(d_model // h, k, h, 1, dropout)
 
     decoder = Decoder(
         layer=DecoderLayer(d_model, c(rel_attn), c(attn), c(ff), dropout),
         N=N,
-        rel_pos_emb=c(rel_pos_emb))
+        relative_pos_emb=c(rel_pos_emb))
 
     if 'pointer' in model_name:
         generator = PointerGenerator(d_model, tgt_vocab, dropout)
@@ -172,9 +189,9 @@ def make_model(src_vocab, tgt_vocab, N=2, d_model=300, d_ff=512, k=5, h=6,
 
     if 'ast_transformer' in model_name:
         encoder = Encoder(
-            layer=EncoderLayer(d_model, c(tree_attn), c(ff), dropout),
+            layer=EncoderLayer(d_model, c(rel_attn), c(ff), dropout),
             N=N,
-            rel_pos_emb=c(tree_rel_pos_emb)
+            relative_pos_emb=c(tree_rel_pos_emb)
         )
         model = ASTEncoderDecoder(
             encoder=encoder,
@@ -188,7 +205,7 @@ def make_model(src_vocab, tgt_vocab, N=2, d_model=300, d_ff=512, k=5, h=6,
         encoder = Encoder(
             layer=EncoderLayer(d_model, c(rel_attn), c(ff), dropout),
             N=N,
-            rel_pos_emb=c(rel_pos_emb))
+            relative_pos_emb=c(rel_pos_emb))
         model = StandardEncoderDecoder(
             encoder=encoder,
             decoder=decoder,

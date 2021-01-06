@@ -5,26 +5,7 @@ from utils import clones
 import torch.nn.functional as F
 
 
-def _standard_rel_attn_inner(x, y, z, transpose):
-    """
-    Args:
-            x: Tensor with shape [batch_size, heads, length or 1, length or depth].
-            y: Tensor with shape [batch_size, heads, length or 1, depth].
-            z: Tensor with shape [length or 1, length, depth].
-            transpose: Whether to transpose inner matrices of y and z. Should be true if
-            last dimension of x is depth, not length.
-        Returns:
-             A Tensor with shape [batch_size, heads, length, length or depth].
-    """
-    batch_size, heads, length, _ = x.size()
-    xy_matmul = torch.matmul(x, y if not transpose else y.transpose(-2, -1))
-    x_t = x.permute(2, 0, 1, 3).contiguous().view(length, heads * batch_size, -1)
-    x_tz_matmul_r = x_t.view(length, batch_size, heads, -1)
-    x_tz_matmul_r_t = x_tz_matmul_r.permute(1, 2, 0, 3)
-    return xy_matmul + x_tz_matmul_r_t
-
-
-def _tree_rel_attn_inner(x, y, z, transpose):
+def _rel_attn_inner(x, y, z, transpose):
     """
         Args:
                 x: Tensor with shape [batch_size, heads, length or 1, length or depth].
@@ -97,13 +78,14 @@ class MultiHeadAttn(nn.Module):
 
         x, attn = _standard_attn(q, k, v, mask=mask,
                                  dropout=self.dropout)
+        x = self._combine_heads(x)
         return self.linear_layers[-1](x), attn
 
 
 class MultiHeadRelAttn(MultiHeadAttn):
     def __init__(self, model_dim, head_count, dropout):
         super().__init__(model_dim, head_count, dropout=dropout)
-        self._rel_attn_inner = _standard_rel_attn_inner
+        self._rel_attn_inner = _rel_attn_inner
 
     def forward(self, q, k, v, mask=None, relative_k=None, relative_v=None):
         q, k, v = \
@@ -111,10 +93,6 @@ class MultiHeadRelAttn(MultiHeadAttn):
              for l, x in zip(self.linear_layers, (q, k, v))]
 
         x, attn = _rel_attn(q, k, v, relative_k, relative_v, self._rel_attn_inner, mask, self.dropout)
+        x = self._combine_heads(x)
         return self.linear_layers[-1](x), attn
 
-
-class MultiHeadRelTreeAttn(MultiHeadRelAttn):
-    def __init__(self, model_dim, head_count, dropout):
-        super().__init__(model_dim, head_count, dropout=dropout)
-        self._rel_attn_inner = _tree_rel_attn_inner
