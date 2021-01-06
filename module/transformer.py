@@ -164,6 +164,7 @@ class DecoderLayer(nn.Module):
         x, _ = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, tgt_mask, relative_k_emb, relative_v_emb))
         x, attn = self.sublayer[1](x, lambda x: self.src_attn(x, m, m, src_mask))
         output, _ = self.sublayer[2](x, self.feed_forward)
+        # print('decoder output: ', torch.masked_select(output, torch.isnan(output)))
         return output, attn
 
 

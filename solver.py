@@ -81,7 +81,7 @@ class Solver:
             print('load epoch ', self.args.load_epoch)
 
         model_opt = torch.optim.Adam(self.model.parameters(), lr=1e-4, betas=(0.9, 0.98), eps=1e-9)
-        criterion = LabelSmoothing(padding_idx=0, smoothing=0.1)
+        criterion = LabelSmoothing(padding_idx=0, smoothing=0.0)
 
         train_model = Train(self.model)
         greedy_evaluator = GreedyEvaluate(self.model, self.args.max_nl_len, Vocab.SOS)

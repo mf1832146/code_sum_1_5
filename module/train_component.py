@@ -70,7 +70,7 @@ class GreedyEvaluate(nn.Module):
 class LabelSmoothing(nn.Module):
     def __init__(self, padding_idx, smoothing=0.0):
         super(LabelSmoothing, self).__init__()
-        self.criterion = nn.KLDivLoss(size_average=False)
+        self.criterion = nn.KLDivLoss(reduction='sum')
         self.padding_idx = padding_idx
         self.confidence = 1.0 - smoothing
         self.smoothing = smoothing
@@ -91,4 +91,6 @@ class LabelSmoothing(nn.Module):
         if mask.dim() > 0:
             true_dist.index_fill_(0, mask.squeeze(), 0.0)
         self.true_dist = true_dist
-        return self.criterion(x, Variable(true_dist, requires_grad=False)) / ntokens
+        loss = self.criterion(x, Variable(true_dist, requires_grad=False))
+        print(loss, ntokens, loss / ntokens)
+        return loss / ntokens

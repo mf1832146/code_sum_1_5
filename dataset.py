@@ -119,14 +119,18 @@ class TreeDataSet(data.Dataset):
             vec_nl = []
             for j, token in enumerate(pre_order_seq):
                 if token in extra_vocab.keys():
-                    vec_seq.append(extra_vocab[token])
+                    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    # vec_seq.append(extra_vocab[token])
+                    vec_seq.append(vocab.UNK)
                 elif token not in vocab.nl2index:
                     # ignore non-leaf nodes
                     if semantic_mask[j] == 0:
                         vec_seq.append(vocab.UNK)
                     else:
                         extra_vocab[token] = len(vocab.nl2index) + len(extra_vocab)
-                        vec_seq.append(extra_vocab[token])
+                        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                        #vec_seq.append(extra_vocab[token])
+                        vec_seq.append(vocab.UNK)
                 else:
                     vec_seq.append(vocab.nl2index[token])
 
@@ -172,12 +176,13 @@ class TreeDataSet(data.Dataset):
         expanded_x = torch.stack(expanded_x, dim=0)
         expanded_y = torch.stack(expanded_y, dim=0)
 
+        batch_predicts = batch_nl[:, 1:]
         batch_nl = batch_nl[:, :-1]
         predicts = expanded_y[:, 1:]
 
         extra_vocab = {k: torch.IntTensor([v]) for k, v in extra_vocab.items()}
 
-        return get_batch_data(batch_seq, batch_nl, vocab.PAD, rel_ids, extra_vocab, expanded_x, batch_semantic_mask), predicts
+        return get_batch_data(batch_seq, batch_nl, vocab.PAD, rel_ids, dict(), expanded_x, batch_semantic_mask), batch_predicts
 
 
 def get_batch_data(src, tgt, pad, rel_ids=[], extra_vocab=dict(), expanded_x=[], semantic_mask=[]):

@@ -16,8 +16,8 @@ class Generator(nn.Module):
     def forward(self, inputs):
         encoder_outputs, decoder_outputs, decoder_attn, tgt_emb, extra_vocab, expanded_word_idx, semantic_mask = inputs
         gen_prob = self.proj(decoder_outputs)
-        gen_prob = F.pad(gen_prob, (0, len(extra_vocab)), 'constant')
-        return torch.log(gen_prob + 1e-9)
+        # gen_prob = F.pad(gen_prob, (0, len(extra_vocab)), 'constant', 1e-9)
+        return torch.log(gen_prob)
 
 
 class PointerGenerator(nn.Module):
@@ -58,11 +58,15 @@ class PointerGenerator(nn.Module):
 
         # p_gen : shape [batch_size, tgt_len, 1]
         p_gen = self.sigmoid(self.dropout(self.w_h(h_t) + self.w_s(decoder_outputs) + self.w_x(tgt_emb)))
-        p_copy = 1-p_gen
+        p_copy = (1-p_gen).expand_as(copy_prob)
 
-        gen_prob = gen_prob * p_gen
-        gen_prob = F.pad(gen_prob, (0, len(extra_vocab)), 'constant')
+        # gen_prob = gen_prob * p_gen
+        gen_prob = F.pad(gen_prob, (0, len(extra_vocab)), 'constant', 0)
         gen_prob.scatter_add_(2, expanded_word_idx.unsqueeze(1).expand(-1, gen_prob.size(1), -1),
                               copy_prob * p_copy)
+        # gen_prob = gen_prob.clamp(1e-9, 1.)
+
+        # print(torch.masked_select(gen_prob, torch.isnan(torch.log(gen_prob + 1e-9))))
+        # print(torch.sum(torch.sum(torch.isnan(torch.log(gen_prob + 1e-5)))))
 
         return torch.log(gen_prob + 1e-9)
