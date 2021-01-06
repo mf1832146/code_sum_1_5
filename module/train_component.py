@@ -92,5 +92,4 @@ class LabelSmoothing(nn.Module):
             true_dist.index_fill_(0, mask.squeeze(), 0.0)
         self.true_dist = true_dist
         loss = self.criterion(x, Variable(true_dist, requires_grad=False))
-        print(loss, ntokens, loss / ntokens)
         return loss / ntokens
