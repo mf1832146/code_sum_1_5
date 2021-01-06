@@ -15,8 +15,7 @@ class TreeDataSet(data.Dataset):
         self.ast_seq = load_json(data_dir + '/' + str(max_ast_size) + '_' + str(k) + '/' + data_set_name + '_pre_order_seq.json')
         self.data_dir = data_dir
         self.data_set_name = data_set_name
-        # self.data_set_len = len(self.data)
-        self.data_set_len = 100
+        self.data_set_len = len(self.data)
 
         self.slice_file_size = slice_file_size
         if self.slice_file_size == -1:
