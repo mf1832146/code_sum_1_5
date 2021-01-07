@@ -11,8 +11,15 @@ class TreeDataSet(data.Dataset):
     def __init__(self, data_dir, data_set_name, matrix_list, max_ast_size, max_nl_size, k,
                  slice_file_size, shuffle=False, with_more_than_k=True):
         print('loading ' + data_set_name + ' data...')
+        self.matrices_path = self.data_dir + '/' + str(self.max_ast_size) + '_' + str(self.k)
+        if with_more_than_k:
+            self.matrices_path += '_' + 'ignore_max_than_k'
+        else:
+            self.matrices_path += '_' + 'with_max_than_k'
+        self.matrices_path += '/' + self.data_set_name
+
         self.data = load_json(data_dir + '/' + data_set_name + '.json')
-        self.ast_seq = load_json(data_dir + '/' + str(max_ast_size) + '_' + str(k) + '/' + data_set_name + '_pre_order_seq.json')
+        self.ast_seq = load_json(self.matrices_path + '_pre_order_seq.json')
         self.data_dir = data_dir
         self.data_set_name = data_set_name
         self.data_set_len = len(self.data)
@@ -34,18 +41,13 @@ class TreeDataSet(data.Dataset):
 
         self.current_slice_index = 0
         self.loaded_data_size = 0
-        self.matrices_path = self.data_dir + '/' + str(self.max_ast_size) + '_' + str(self.k)
-        if with_more_than_k:
-            self.matrices_path += '_' + 'ignore_max_than_k'
-        else:
-            self.matrices_path += '_' + 'with_max_than_k'
-        self.matrices_path += '/' + self.data_set_name + '_matrices_'
+
 
     def __len__(self):
         return self.data_set_len
 
     def get_slice_data(self):
-        matrices = np.load(self.matrices_path + str(self.slices[self.current_slice_index]) + '.npz')
+        matrices = np.load(self.matrices_path + '_matrices_' + str(self.slices[self.current_slice_index]) + '.npz')
 
         self.par_matrix_slice = matrices['par']
         self.bro_matrix_slice = matrices['bro']
