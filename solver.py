@@ -5,7 +5,6 @@ import torch
 
 from blue import BLEU4
 from dataset import TreeDataSet
-from pytorch_pretrained_bert import BertAdam
 from ignite.contrib.handlers.tensorboard_logger import *
 
 from data_pre_process.vocab import Vocab
@@ -40,6 +39,7 @@ class Solver:
                                 model_name=self.args.model)
 
     def train(self):
+        with_more_than_k = True if self.args.mtk == 1 else False
         train_data_set = TreeDataSet(self.args.data_dir,
                                      'train',
                                      self.feature_list,
@@ -47,7 +47,8 @@ class Solver:
                                      self.args.max_nl_len,
                                      self.args.k,
                                      4096,
-                                     shuffle=True)
+                                     shuffle=True,
+                                     with_more_than_k=with_more_than_k)
         valid_data_set = TreeDataSet(self.args.data_dir,
                                      'valid',
                                      self.feature_list,
@@ -55,7 +56,8 @@ class Solver:
                                      self.args.max_nl_len,
                                      self.args.k,
                                      -1,
-                                     shuffle=False)
+                                     shuffle=False,
+                                     with_more_than_k=with_more_than_k)
         train_loader = DataLoader(dataset=train_data_set,
                                   batch_size=self.args.batch_size,
                                   shuffle=False,

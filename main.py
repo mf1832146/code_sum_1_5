@@ -15,6 +15,7 @@ def parse():
     parser.add_argument('-num_step', type=int, default=250)
     parser.add_argument('-num_layers', type=int, default=2, help='layer num')
     parser.add_argument('-model_dim', type=int, default=384)
+    parser.add_argument('-mtk', type=int, default=0, help='with more than k nodes. if 1, with. else ignore')
     parser.add_argument('-num_heads', type=int, default=6)
     parser.add_argument('-ffn_dim', type=int, default=1536)
 
